@@ -12,7 +12,7 @@ BASE_DIR = dirname(dirname(__file__))
 
 
 LOCAL_ENV_JSON_FILE = join(BASE_DIR, 'env.json')
-SAMPLE_DATA_FILE = join(dirname(BASE_DIR), 'k.csv')
+
 if not exists(LOCAL_ENV_JSON_FILE):
     raise Exception('LOCAL ENV file not found.')
 
@@ -23,16 +23,22 @@ with open(LOCAL_ENV_JSON_FILE) as data:
 if not ENV_JSON.get('MONGODB_HOST') or not ENV_JSON.get('MONGODB_PORT'):
     raise Exception('DATABASE Configuration not found. Please look at readme')
 
+# Setting the sample csv file to test functionalities
+# The file should be placed in parent folder of this project path
+SAMPLE_DATA_FILE_NAME = ENV_JSON.get('SAMPLE_DATA_FILE_NAME', 'k.csv')
+SAMPLE_DATA_FILE = join(dirname(BASE_DIR), SAMPLE_DATA_FILE_NAME)
+
 db = None
+DB_NAME = ENV_JSON.get('DB_NAME', 'admin')
+EVENTS_TABLE_NAME = ENV_JSON.get('EVENTS_TABLE_NAME', 'test_data.events')
+REPORT_RESULTS_TABLE_NAME = ENV_JSON.get('REPORT_RESULTS_TABLE_NAME', 'test_data.reports')
+REPORT_CONTACT_REF_FIELD_NAME = ENV_JSON.get('REPORT_CONTACT_REF_FIELD_NAME', 'contact_event_ref')
+REPORT_CONTACT_TIME_DELTA_FIELD_NAME = ENV_JSON.get('REPORT_CONTACT_TIME_DELTA_FIELD_NAME', 'contact_time_delta')
+REPORT_ANALYSIS_TIME_WINDOW = ENV_JSON.get('REPORT_ANALYSIS_TIME_WINDOW', 10)
+
 try:
     client = MongoClient(ENV_JSON.get('MONGODB_HOST'), ENV_JSON.get('MONGODB_PORT'))
-    db = client.admin
+    db = client[DB_NAME]
 except Exception as e:
     raise Exception("DB Connection failed!")
     print(str(e))
-
-
-REPORT_DB_NAME = ENV_JSON.get('REPORT_DB_NAME', 'report_data')
-EVENTS_TABLE_NAME = ENV_JSON.get('EVENTS_TABLE_NAME', 'events')
-REPORT_CONTACT_REF_FIELD_NAME = ENV_JSON.get('REPORT_CONTACT_REF_FIELD_NAME', 'contact_event_ref')
-REPORT_CONTACT_TIME_DELTA_FIELD_NAME = ENV_JSON.get('REPORT_CONTACT_TIME_DELTA_FIELD_NAME', 'contact_time_delta')

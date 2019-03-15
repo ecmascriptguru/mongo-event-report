@@ -31,16 +31,15 @@ class DataDog(object):
 
     def __init__(self, *args, **kwargs):
         self.db = db
-        self.report_data = self.db[REPORT_DB_NAME]
         if ENV == ENVIRONMENT.development:
             self.prepare_example_data()
         else:
-            if not "%s.%s" % (REPORT_DB_NAME, EVENTS_TABLE_NAME) in\
+            if not EVENTS_TABLE_NAME in\
                 self.db.collection_names(include_system_collections=False):
                 raise Exception("Collections not found. You may need to check"
                 "'env.json' file in project folder.")
             else:
-                self.events = self.report_data[EVENTS_TABLE_NAME]
+                self.events = self.db[EVENTS_TABLE_NAME]
 
     def import_sample(self, file, encoding):
         read_map = {
@@ -71,9 +70,9 @@ class DataDog(object):
         if not _:
             raise Exception("Failed to load data from spreadsheet.")
         
-        if not "%s.%s" %(REPORT_DB_NAME, EVENTS_TABLE_NAME) in\
-                        self.db.collection_names(include_system_collections=False):
-            self.events = self.report_data[EVENTS_TABLE_NAME]
+        if not EVENTS_TABLE_NAME in\
+                    self.db.collection_names(include_system_collections=False):
+            self.events = self.db[EVENTS_TABLE_NAME]
             for row in rows:
                 row.pop('Index')
                 row['ts'] = parse(row['ts'])
@@ -81,11 +80,11 @@ class DataDog(object):
             result = self.events.insert_many(rows)
             print("%d events were added into database successfully." % len(result.inserted_ids))
         else:
-            self.events = self.report_data[EVENTS_TABLE_NAME]
+            self.events = self.db[EVENTS_TABLE_NAME]
 
     def assign_contact_ref(self):
         cursor = self.events.find({
-            # REPORT_CONTACT_REF_FIELD_NAME: { "$exists": False },
+            REPORT_CONTACT_REF_FIELD_NAME: { "$exists": False },
             "type": { "$in": ['login', 'deposit'] }
         })
         for doc in cursor:
@@ -111,13 +110,12 @@ class DataDog(object):
         
         if not self.is_report_ready:
             self.preprocess()
-
-    @property
-    def contacts(self):
-        if not hasattr(self, 'events'):
-            raise Exception('Data was not ready.')
         
-        return self.events.find({'type': TYPE.contact, 'subtype': {'$nin': [SUB_TYPE.contact_notification]}})
+        if event_id:
+            reports = self.db[REPORT_RESULTS_TABLE_NAME]
+            return reports.find_one({ 'id': event_id })
+        else:
+            return False
 
     def preprocess(self):
         pipeline = [
@@ -126,7 +124,7 @@ class DataDog(object):
                     u"type": u"contact",
                     u"subtype": {
                         u"$nin": [
-                            u"notification"
+                            SUB_TYPE.contact_notification
                         ]
                     }
                 }
@@ -161,7 +159,7 @@ class DataDog(object):
                                         u"$expr": {
                                             u"$eq": [
                                                 u"$$CURRENT.type",
-                                                u"login"
+                                                TYPE.login
                                             ]
                                         }
                                     },
@@ -169,7 +167,7 @@ class DataDog(object):
                                         u"$expr": {
                                             u"$lt": [
                                                 u"$$CURRENT.contact_time_delta",
-                                                10.0
+                                                REPORT_ANALYSIS_TIME_WINDOW
                                             ]
                                         }
                                     }
@@ -210,7 +208,7 @@ class DataDog(object):
                                         u"$expr": {
                                             u"$eq": [
                                                 u"$$CURRENT.type",
-                                                u"deposit"
+                                                TYPE.deposit
                                             ]
                                         }
                                     },
@@ -218,7 +216,7 @@ class DataDog(object):
                                         u"$expr": {
                                             u"$lt": [
                                                 u"$$CURRENT.contact_time_delta",
-                                                10.0
+                                                REPORT_ANALYSIS_TIME_WINDOW
                                             ]
                                         }
                                     }
@@ -294,13 +292,13 @@ class DataDog(object):
                 }
             }, 
             {
-                u"$out": u"test_data.reports"
+                u"$out": REPORT_RESULTS_TABLE_NAME
             }
         ]
 
         cursor = self.events.aggregate(
             pipeline, 
-            allowDiskUse = False
+            allowDiskUse = True
         )
         self.is_report_ready = True
         return True
