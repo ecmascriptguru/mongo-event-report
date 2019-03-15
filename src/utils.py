@@ -104,16 +104,16 @@ class DataDog(object):
         self.is_preprocessed = True
         return True
 
-    def get_report(self, event_id=None):
+    def get_report(self, event_ids=[]):
         if not self.is_preprocessed:
             self.assign_contact_ref()
         
         if not self.is_report_ready:
             self.preprocess()
         
-        if event_id:
+        if event_ids and isinstance(event_ids, list):
             reports = self.db[REPORT_RESULTS_TABLE_NAME]
-            return reports.find_one({ 'id': event_id })
+            return reports.find({ 'id': { '$in': event_ids }})
         else:
             return False
 
