@@ -44,8 +44,9 @@ You need to keep patient at the very first because the first execution should an
 
 If you want to get report for a specific contact event, please follow the script. You just need to give event IDs.
 ```shell
-python run.py extracoins-december18 11
+python run.py extracoins-december18 2018-12-31
 ```
+Unless you gave the date, then the script will consider that you would want to get report for yesterday.
 
 ## Remarks
 ### Issues or Inconvenience of DB Structure
