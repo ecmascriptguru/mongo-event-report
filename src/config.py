@@ -7,6 +7,12 @@ class ENVIRONMENT:
     development = 'dev'
     production = 'production'
 
+
+class COMMAND_OPTIONS:
+    all = '--all'
+    date = '--date'
+
+
 ENV = os.environ.get('REPORT_PROJECT_ENV', ENVIRONMENT.production)
 BASE_DIR = dirname(dirname(__file__))
 

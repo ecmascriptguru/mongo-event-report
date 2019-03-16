@@ -37,13 +37,11 @@ Now you are ready to give it a try.
 
 ## Running the script
 If you finished the above things, then you should be able to execute the script to get the report. The following script will create the reports collection. In case of `dev` environment, this script will parse the sample file to create the collection specified by `EVENTS_TABLE_NAME`.
-```shell
-python run.py
-```
-You need to keep patient at the very first because the first execution should analyze the events table to assign the linking contact event to the purpose events. Later, it should not take such long.
 
-If you want to get report for a specific contact event, please follow the script. You just need to give event IDs.
+### Example commands
 ```shell
+python run.py --all
+python run.py --date 2018-12-31
 python run.py extracoins-december18 2018-12-31
 ```
 Unless you gave the date, then the script will consider that you would want to get report for yesterday.

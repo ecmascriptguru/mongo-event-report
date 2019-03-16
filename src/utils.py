@@ -103,8 +103,103 @@ class DataDog(object):
                 self.events.save(doc)
         self.is_preprocessed = True
         return True
+    
+    def get_possible_report_keys(self, date=None):
+        collection = self.events
+
+        if date is None:
+            pipeline = [
+                {
+                    u"$match": {
+                        u"type": TYPE.contact,
+                        u"subtype": {
+                            u"$nin": [
+                                SUB_TYPE.contact_notification
+                            ]
+                        }
+                    }
+                }, 
+                {
+                    u"$addFields": {
+                        u"date": {
+                            u"$dateToString": {
+                                u"format": u"%Y-%m-%d",
+                                u"date": u"$ts"
+                            }
+                        }
+                    }
+                }, 
+                {
+                    u"$group": {
+                        u"_id": {
+                            u"id": u"$id",
+                            u"date": u"$date"
+                        }
+                    }
+                }, 
+                {
+                    u"$project": {
+                        u"_id": 0,
+                        u"id": u"$_id.id",
+                        u"date": u"$_id.date"
+                    }
+                }
+            ]
+        else:
+            pipeline = [
+                {
+                    u"$addFields": {
+                        u"date": {
+                            u"$dateToString": {
+                                u"format": u"%Y-%m-%d",
+                                u"date": u"$ts"
+                            }
+                        }
+                    }
+                }, 
+                {
+                    u"$match": {
+                        u"type": TYPE.contact,
+                        u"subtype": {
+                            u"$nin": [
+                                SUB_TYPE.contact_notification
+                            ]
+                        },
+                        u"date": date,
+                    }
+                }, 
+                {
+                    u"$group": {
+                        u"_id": {
+                            u"id": u"$id",
+                            u"date": u"$date"
+                        }
+                    }
+                }, 
+                {
+                    u"$project": {
+                        u"_id": 0,
+                        u"id": u"$_id.id",
+                        u"date": u"$_id.date"
+                    }
+                }
+            ]
+
+        cursor = collection.aggregate(
+            pipeline, 
+            allowDiskUse = True
+        )
+        return [(doc['id'], doc['date']) for doc in cursor]
+    
+    def report_for_all_data(self, date=None):
+        count = 0
+        keys = self.get_possible_report_keys(date)
+        for id, date in keys:
+            count += self.get_report(id, date)
+        return count
 
     def get_report(self, event_id, date=None):
+        count = 0
         if date is None:
             yesterday = date.today() - timedelta(1)
             date = yesterday.strftime('%Y-%m-%d')
@@ -113,16 +208,14 @@ class DataDog(object):
             self.assign_contact_ref()
         
         reports = self.preprocess(event_id, date)
-        if len(reports) > 0:
-            report = reports[0]
+        for report in reports:
             self.reports.update({
                     u"id": report["id"],
                     u"subtype": report["subtype"],
                     u"date": report["date"]
                 }, report, upsert=True)
-            return report
-        else:
-            return None
+            count += 1
+        return count
             
 
     def preprocess(self, event_id, date):
