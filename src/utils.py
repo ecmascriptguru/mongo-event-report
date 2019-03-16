@@ -30,6 +30,7 @@ class DataDog(object):
 
     def __init__(self, *args, **kwargs):
         self.db = db
+        self.reports = self.db[REPORT_RESULTS_TABLE_NAME]
         if ENV == ENVIRONMENT.development:
             self.prepare_example_data()
         else:
@@ -113,7 +114,13 @@ class DataDog(object):
         
         reports = self.preprocess(event_id, date)
         if len(reports) > 0:
-            return reports[0]
+            report = reports[0]
+            self.reports.update({
+                    u"id": report["id"],
+                    u"subtype": report["subtype"],
+                    u"date": report["date"]
+                }, report, upsert=True)
+            return report
         else:
             return None
             
@@ -144,7 +151,10 @@ class DataDog(object):
             }, 
             {
                 u"$group": {
-                    u"_id": u"$id",
+                    u"_id": {
+                        u"id": u"$id",
+                        u"subtype": u"$subtype"
+                    },
                     u"contacts": {
                         u"$sum": 1.0
                     }
@@ -154,7 +164,7 @@ class DataDog(object):
                 u"$lookup": {
                     u"from": u"test_data.events",
                     u"let": {
-                        u"event_id": u"$_id"
+                        u"event_id": u"$_id.id"
                     },
                     u"pipeline": [
                         {
@@ -203,7 +213,7 @@ class DataDog(object):
                 u"$lookup": {
                     u"from": u"test_data.events",
                     u"let": {
-                        u"event_id": u"$_id"
+                        u"event_id": u"$_id.id"
                     },
                     u"pipeline": [
                         {
@@ -259,6 +269,7 @@ class DataDog(object):
                     u"_id": 0,
                     u"id": u"$_id",
                     u"date": date,
+                    u"subtype": u"$_id.subtype",
                     u"contacts": u"$contacts",
                     u"loggedin_players": {
                         u"$size": u"$logins"
