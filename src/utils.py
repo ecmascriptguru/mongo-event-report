@@ -1,4 +1,4 @@
-import datetime
+from datetime import date, timedelta
 import pandas as pd
 from bson.son import SON
 from dateutil.parser import parse
@@ -6,15 +6,15 @@ from .config import *
 
 
 class TYPE:
-    contact = 'contact'
-    login = 'login'
-    deposit = 'deposit'
+    contact = u"contact"
+    login = u"login"
+    deposit = u"deposit"
 
 
 class SUB_TYPE:
-    contact_email = 'email'
-    contact_sms = 'sms'
-    contact_notification = 'notification'
+    contact_email = u"email"
+    contact_sms = u"sms"
+    contact_notification = u"notification"
 
 
 SUB_TYPES = {
@@ -26,7 +26,6 @@ SUB_TYPES = {
 
 class DataDog(object):
     """Utility to manage data resource"""
-    is_report_ready = False
     is_preprocessed = False
 
     def __init__(self, *args, **kwargs):
@@ -104,21 +103,33 @@ class DataDog(object):
         self.is_preprocessed = True
         return True
 
-    def get_report(self, event_ids=[]):
+    def get_report(self, event_id, date=None):
+        if date is None:
+            yesterday = date.today() - timedelta(1)
+            date = yesterday.strftime('%Y-%m-%d')
+
         if not self.is_preprocessed:
             self.assign_contact_ref()
         
-        if not self.is_report_ready:
-            self.preprocess()
-        
-        if event_ids and isinstance(event_ids, list):
-            reports = self.db[REPORT_RESULTS_TABLE_NAME]
-            return reports.find({ 'id': { '$in': event_ids }})
+        reports = self.preprocess(event_id, date)
+        if len(reports) > 0:
+            return reports[0]
         else:
-            return False
+            return None
+            
 
-    def preprocess(self):
+    def preprocess(self, event_id, date):
         pipeline = [
+            {
+                u"$addFields": {
+                    u"date": {
+                        u"$dateToString": {
+                            u"format": u"%Y-%m-%d",
+                            u"date": u"$ts"
+                        }
+                    }
+                }
+            }, 
             {
                 u"$match": {
                     u"type": u"contact",
@@ -126,7 +137,9 @@ class DataDog(object):
                         u"$nin": [
                             SUB_TYPE.contact_notification
                         ]
-                    }
+                    },
+                    u"date": date,
+                    u"id": event_id
                 }
             }, 
             {
@@ -243,8 +256,9 @@ class DataDog(object):
             }, 
             {
                 u"$project": {
-                    u"_id": 0.0,
+                    u"_id": 0,
                     u"id": u"$_id",
+                    u"date": date,
                     u"contacts": u"$contacts",
                     u"loggedin_players": {
                         u"$size": u"$logins"
@@ -290,15 +304,10 @@ class DataDog(object):
                         }
                     }
                 }
-            }, 
-            {
-                u"$out": REPORT_RESULTS_TABLE_NAME
             }
         ]
 
         cursor = self.events.aggregate(
-            pipeline, 
-            allowDiskUse = True
+            pipeline, allowDiskUse = True
         )
-        self.is_report_ready = True
-        return True
+        return [doc for doc in cursor]
