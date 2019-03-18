@@ -1,5 +1,5 @@
 import sys
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from src.config import ENV, COMMAND_OPTIONS
 from src.utils import DataDog
 
@@ -47,6 +47,8 @@ def run():
     print("%d report(s) created in %s mode." % (count, ENV))
 
 if __name__ == "__main__":
-    # dog = DataDog()
-    # dog.report_for_all_data()
+    start_point = datetime.now()
     run()
+    end_point = datetime.now()
+    execusion_time = end_point - start_point
+    print("It took %d seconds to be finished." % execusion_time.seconds)

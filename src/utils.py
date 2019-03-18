@@ -154,22 +154,22 @@ class DataDog(object):
         else:
             pipeline = [
                 {
-                    u"$addFields": {
-                        u"date": {
-                            u"$dateToString": {
-                                u"format": u"%Y-%m-%d",
-                                u"date": u"$ts"
-                            }
-                        }
-                    }
-                }, 
-                {
                     u"$match": {
                         u"type": u"contact",
                         u"subtype": {
                             u"$nin": [
                                 u"notification"
                             ]
+                        }
+                    }
+                }, 
+                {
+                    u"$addFields": {
+                        u"date": {
+                            u"$dateToString": {
+                                u"format": u"%Y-%m-%d",
+                                u"date": u"$ts"
+                            }
                         }
                     }
                 }, 
