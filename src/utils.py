@@ -111,6 +111,16 @@ class DataDog(object):
         if date is not None:
             pipeline = [
                 {
+                    u"$match": {
+                        u"type": u"contact",
+                        u"subtype": {
+                            u"$nin": [
+                                u"notification"
+                            ]
+                        },
+                    }
+                }, 
+                {
                     u"$addFields": {
                         u"date": {
                             u"$dateToString": {
@@ -122,15 +132,9 @@ class DataDog(object):
                 }, 
                 {
                     u"$match": {
-                        u"type": u"contact",
-                        u"subtype": {
-                            u"$nin": [
-                                u"notification"
-                            ]
-                        },
-                        u"date": { u"$in": [date] },
+                        u"date": date,
                     }
-                }, 
+                },
                 {
                     u"$group": {
                         u"_id": {
