@@ -4,7 +4,7 @@ from src.config import ENV, COMMAND_OPTIONS
 from src.utils import DataDog
 
 
-if __name__ == "__main__":
+def run():
     if len(sys.argv) < 2:
         raise Exception("""Missing arguments.
             You should give 2 args least.
@@ -29,19 +29,24 @@ if __name__ == "__main__":
     elif command_option == COMMAND_OPTIONS.date:
         if len(sys.argv) < 3:
             raise Exception("Date option is missing.")
-        date = sys.argv[2]
+        date_string = sys.argv[2]
 
-        print("Script is running with %s option for %s in %s mode..." % (COMMAND_OPTIONS.all, date, ENV))
-        count = dog.report_for_all_data(date)
+        print("Script is running with %s option for %s in %s mode..." % (COMMAND_OPTIONS.all, date_string, ENV))
+        count = dog.report_for_all_data(date_string)
     else:
         event_id = sys.argv[1]
         if len(sys.argv) > 2:
-            date = sys.argv[2]
+            date_string = sys.argv[2]
         else:
             yesterday = date.today() - timedelta(1)
-            date = yesterday.strftime('%Y-%m-%d')
+            date_string = yesterday.strftime('%Y-%m-%d')
         
-        print("Script is running with event(%s) at (%s) in %s mode..." % (event_id, date, ENV))
-        count = dog.get_report(event_id, date)
+        print("Script is running with event(%s) at (%s) in %s mode..." % (event_id, date_string, ENV))
+        count = dog.get_report(event_id, date_string)
 
     print("%d report(s) created in %s mode." % (count, ENV))
+
+if __name__ == "__main__":
+    # dog = DataDog()
+    # dog.report_for_all_data()
+    run()

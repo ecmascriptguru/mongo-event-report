@@ -97,7 +97,8 @@ class DataDog(object):
                 },
                 sort=[('ts', -1)])
             if contact_ref:
-                doc[REPORT_CONTACT_REF_FIELD_NAME] = contact_ref['id']
+                doc[REPORT_CONTACT_REF_FIELD_NAME] = contact_ref['_id']
+                doc[REPORT_CONTACT_REF_SUBTYPE_FIELD_NAME] = contact_ref['subtype']
                 doc[REPORT_CONTACT_TIME_DELTA_FIELD_NAME] =\
                     int((doc['ts'] - contact_ref['ts']).total_seconds() / (60 * 60))
                 self.events.save(doc)
@@ -107,18 +108,8 @@ class DataDog(object):
     def get_possible_report_keys(self, date=None):
         collection = self.events
 
-        if date is None:
+        if date is not None:
             pipeline = [
-                {
-                    u"$match": {
-                        u"type": TYPE.contact,
-                        u"subtype": {
-                            u"$nin": [
-                                SUB_TYPE.contact_notification
-                            ]
-                        }
-                    }
-                }, 
                 {
                     u"$addFields": {
                         u"date": {
@@ -130,18 +121,32 @@ class DataDog(object):
                     }
                 }, 
                 {
-                    u"$group": {
-                        u"_id": {
-                            u"id": u"$id",
-                            u"date": u"$date"
-                        }
+                    u"$match": {
+                        u"type": u"contact",
+                        u"subtype": {
+                            u"$nin": [
+                                u"notification"
+                            ]
+                        },
+                        u"date": { u"$in": [date] },
                     }
                 }, 
                 {
-                    u"$project": {
-                        u"_id": 0,
-                        u"id": u"$_id.id",
-                        u"date": u"$_id.date"
+                    u"$facet": {
+                        u"event_ids": [
+                            {
+                                u"$group": {
+                                    u"_id": u"$id"
+                                }
+                            }
+                        ],
+                        u"dates": [
+                            {
+                                u"$group": {
+                                    u"_id": u"$date"
+                                }
+                            }
+                        ]
                     }
                 }
             ]
@@ -159,28 +164,30 @@ class DataDog(object):
                 }, 
                 {
                     u"$match": {
-                        u"type": TYPE.contact,
+                        u"type": u"contact",
                         u"subtype": {
                             u"$nin": [
-                                SUB_TYPE.contact_notification
+                                u"notification"
                             ]
-                        },
-                        u"date": date,
-                    }
-                }, 
-                {
-                    u"$group": {
-                        u"_id": {
-                            u"id": u"$id",
-                            u"date": u"$date"
                         }
                     }
                 }, 
                 {
-                    u"$project": {
-                        u"_id": 0,
-                        u"id": u"$_id.id",
-                        u"date": u"$_id.date"
+                    u"$facet": {
+                        u"event_ids": [
+                            {
+                                u"$group": {
+                                    u"_id": u"$id"
+                                }
+                            }
+                        ],
+                        u"dates": [
+                            {
+                                u"$group": {
+                                    u"_id": u"$date"
+                                }
+                            }
+                        ]
                     }
                 }
             ]
@@ -189,13 +196,21 @@ class DataDog(object):
             pipeline, 
             allowDiskUse = True
         )
-        return [(doc['id'], doc['date']) for doc in cursor]
+        for doc in cursor:
+            return [item['_id'] for item in doc['event_ids']], [item['_id'] for item in doc['dates']]
     
     def report_for_all_data(self, date=None):
         count = 0
-        keys = self.get_possible_report_keys(date)
-        for id, date in keys:
-            count += self.get_report(id, date)
+        event_ids, dates = self.get_possible_report_keys(date)
+        
+        reports = self.create_reports(event_ids, dates)
+        for report in reports:
+            self.reports.update({
+                    u"id": report["id"],
+                    u"subtype": report["subtype"],
+                    u"date": report["date"]
+                }, report, upsert=True)
+            count += 1
         return count
 
     def get_report(self, event_id, date=None):
@@ -203,11 +218,8 @@ class DataDog(object):
         if date is None:
             yesterday = date.today() - timedelta(1)
             date = yesterday.strftime('%Y-%m-%d')
-
-        if not self.is_preprocessed:
-            self.assign_contact_ref()
         
-        reports = self.preprocess(event_id, date)
+        reports = self.create_reports([event_id], [date])
         for report in reports:
             self.reports.update({
                     u"id": report["id"],
@@ -218,7 +230,10 @@ class DataDog(object):
         return count
             
 
-    def preprocess(self, event_id, date):
+    def create_reports(self, event_ids, dates):
+        if not self.is_preprocessed:
+            self.assign_contact_ref()
+
         pipeline = [
             {
                 u"$addFields": {
@@ -235,29 +250,30 @@ class DataDog(object):
                     u"type": u"contact",
                     u"subtype": {
                         u"$nin": [
-                            SUB_TYPE.contact_notification
+                            u"notification"
                         ]
                     },
-                    u"date": date,
-                    u"id": event_id
+                    u"date": { u"$in": dates },
+                    u"id": { u"$in": event_ids }
                 }
             }, 
             {
                 u"$group": {
                     u"_id": {
                         u"id": u"$id",
-                        u"subtype": u"$subtype"
+                        u"subtype": u"$subtype",
+                        u"date": u"$date",
                     },
-                    u"contacts": {
-                        u"$sum": 1.0
+                    u"_ids": {
+                        u"$push": u"$$ROOT._id"
                     }
                 }
             }, 
             {
                 u"$lookup": {
-                    u"from": u"test_data.events",
+                    u"from": EVENTS_TABLE_NAME,
                     u"let": {
-                        u"event_id": u"$_id.id"
+                        u"event_ids": u"$_ids"
                     },
                     u"pipeline": [
                         {
@@ -265,9 +281,9 @@ class DataDog(object):
                                 u"$and": [
                                     {
                                         u"$expr": {
-                                            u"$eq": [
-                                                u"$$CURRENT.contact_event_ref",
-                                                u"$$event_id"
+                                            u"$in": [
+                                                u"$$CURRENT.%s" % REPORT_CONTACT_REF_FIELD_NAME,
+                                                u"$$event_ids"
                                             ]
                                         }
                                     },
@@ -282,7 +298,7 @@ class DataDog(object):
                                     {
                                         u"$expr": {
                                             u"$lt": [
-                                                u"$$CURRENT.contact_time_delta",
+                                                u"$$CURRENT.%s" % REPORT_ANALYSIS_TIME_WINDOW,
                                                 REPORT_ANALYSIS_TIME_WINDOW
                                             ]
                                         }
@@ -294,7 +310,7 @@ class DataDog(object):
                             u"$group": {
                                 u"_id": u"$$CURRENT.player",
                                 u"count": {
-                                    u"$sum": 1.0
+                                    u"$sum": 1
                                 }
                             }
                         }
@@ -304,9 +320,9 @@ class DataDog(object):
             }, 
             {
                 u"$lookup": {
-                    u"from": u"test_data.events",
+                    u"from": EVENTS_TABLE_NAME,
                     u"let": {
-                        u"event_id": u"$_id.id"
+                        u"event_ids": u"$_ids"
                     },
                     u"pipeline": [
                         {
@@ -314,9 +330,9 @@ class DataDog(object):
                                 u"$and": [
                                     {
                                         u"$expr": {
-                                            u"$eq": [
-                                                u"$$CURRENT.contact_event_ref",
-                                                u"$$event_id"
+                                            u"$in": [
+                                                u"$$CURRENT.%s" % REPORT_CONTACT_REF_FIELD_NAME,
+                                                u"$$event_ids"
                                             ]
                                         }
                                     },
@@ -331,7 +347,7 @@ class DataDog(object):
                                     {
                                         u"$expr": {
                                             u"$lt": [
-                                                u"$$CURRENT.contact_time_delta",
+                                                u"$$CURRENT.%s" % REPORT_ANALYSIS_TIME_WINDOW,
                                                 REPORT_ANALYSIS_TIME_WINDOW
                                             ]
                                         }
@@ -343,7 +359,7 @@ class DataDog(object):
                             u"$group": {
                                 u"_id": u"$$CURRENT.player",
                                 u"count": {
-                                    u"$sum": 1.0
+                                    u"$sum": 1
                                 },
                                 u"sum": {
                                     u"$sum": u"$$CURRENT.value"
@@ -360,10 +376,12 @@ class DataDog(object):
             {
                 u"$project": {
                     u"_id": 0,
-                    u"id": u"$_id",
-                    u"date": date,
+                    u"id": u"$_id.id",
                     u"subtype": u"$_id.subtype",
-                    u"contacts": u"$contacts",
+                    u"date": u"$_id.date",
+                    u"contacts": {
+                        u"$size": u"$_ids"
+                    },
                     u"loggedin_players": {
                         u"$size": u"$logins"
                     },
