@@ -228,6 +228,17 @@ class DataDog(object):
 
         pipeline = [
             {
+                u"$match": {
+                    u"type": u"contact",
+                    u"subtype": {
+                        u"$nin": [
+                            u"notification"
+                        ]
+                    },
+                    u"id": event_id,
+                }
+            }, 
+            {
                 u"$addFields": {
                     u"date": {
                         u"$dateToString": {
@@ -239,16 +250,9 @@ class DataDog(object):
             }, 
             {
                 u"$match": {
-                    u"type": u"contact",
-                    u"subtype": {
-                        u"$nin": [
-                            u"notification"
-                        ]
-                    },
                     u"date": date,
-                    u"id": event_id,
                 }
-            }, 
+            },
             {
                 u"$group": {
                     u"_id": {
