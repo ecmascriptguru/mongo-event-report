@@ -132,21 +132,18 @@ class DataDog(object):
                     }
                 }, 
                 {
-                    u"$facet": {
-                        u"event_ids": [
-                            {
-                                u"$group": {
-                                    u"_id": u"$id"
-                                }
-                            }
-                        ],
-                        u"dates": [
-                            {
-                                u"$group": {
-                                    u"_id": u"$date"
-                                }
-                            }
-                        ]
+                    u"$group": {
+                        u"_id": {
+                            u"id": u"$id",
+                            u"date": u"$date"
+                        }
+                    }
+                }, 
+                {
+                    u"$project": {
+                        u"_id": 0.0,
+                        u"id": u"$_id.id",
+                        u"date": u"$_id.date"
                     }
                 }
             ]
@@ -173,21 +170,18 @@ class DataDog(object):
                     }
                 }, 
                 {
-                    u"$facet": {
-                        u"event_ids": [
-                            {
-                                u"$group": {
-                                    u"_id": u"$id"
-                                }
-                            }
-                        ],
-                        u"dates": [
-                            {
-                                u"$group": {
-                                    u"_id": u"$date"
-                                }
-                            }
-                        ]
+                    u"$group": {
+                        u"_id": {
+                            u"id": u"$id",
+                            u"date": u"$date"
+                        }
+                    }
+                }, 
+                {
+                    u"$project": {
+                        u"_id": 0.0,
+                        u"id": u"$_id.id",
+                        u"date": u"$_id.date"
                     }
                 }
             ]
@@ -196,21 +190,15 @@ class DataDog(object):
             pipeline, 
             allowDiskUse = True
         )
-        for doc in cursor:
-            return [item['_id'] for item in doc['event_ids']], [item['_id'] for item in doc['dates']]
+        return [(doc['id'], doc['date']) for doc in cursor]
     
     def report_for_all_data(self, date=None):
         count = 0
-        event_ids, dates = self.get_possible_report_keys(date)
+        keys = self.get_possible_report_keys(date)
         
-        reports = self.create_reports(event_ids, dates)
-        for report in reports:
-            self.reports.update({
-                    u"id": report["id"],
-                    u"subtype": report["subtype"],
-                    u"date": report["date"]
-                }, report, upsert=True)
-            count += 1
+        for id, date in keys:
+            count += self.get_report(id, date)
+
         return count
 
     def get_report(self, event_id, date=None):
@@ -219,7 +207,7 @@ class DataDog(object):
             yesterday = date.today() - timedelta(1)
             date = yesterday.strftime('%Y-%m-%d')
         
-        reports = self.create_reports([event_id], [date])
+        reports = self.create_reports(event_id, date)
         for report in reports:
             self.reports.update({
                     u"id": report["id"],
@@ -230,7 +218,7 @@ class DataDog(object):
         return count
             
 
-    def create_reports(self, event_ids, dates):
+    def create_reports(self, event_id, date):
         if not self.is_preprocessed:
             self.assign_contact_ref()
 
@@ -253,8 +241,8 @@ class DataDog(object):
                             u"notification"
                         ]
                     },
-                    u"date": { u"$in": dates },
-                    u"id": { u"$in": event_ids }
+                    u"date": date,
+                    u"id": event_id,
                 }
             }, 
             {
