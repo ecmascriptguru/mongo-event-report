@@ -198,11 +198,225 @@ class DataDog(object):
     
     def report_for_all_data(self, date=None):
         count = 0
-        keys = self.get_possible_report_keys(date)
         
-        for id, date in keys:
-            count += self.get_report(id, date)
+        if not self.is_preprocessed:
+            self.assign_contact_ref()
 
+        pipeline = [
+            {
+                u"$match": {
+                    u"type": u"contact",
+                    u"subtype": {
+                        u"$nin": [
+                            u"notification"
+                        ]
+                    },
+                }
+            }, 
+            {
+                u"$addFields": {
+                    u"date": {
+                        u"$dateToString": {
+                            u"format": u"%Y-%m-%d",
+                            u"date": u"$ts"
+                        }
+                    }
+                }
+            }, 
+        ]
+
+        if date is not None:
+            pipeline.append(
+                {
+                    u"$match": {
+                        u"date": date,
+                    }
+                }
+            )
+
+        pipeline += [
+            {
+                u"$group": {
+                    u"_id": {
+                        u"id": u"$id",
+                        u"subtype": u"$subtype",
+                        u"date": u"$date",
+                    },
+                    u"_ids": {
+                        u"$push": u"$$ROOT._id"
+                    }
+                }
+            }, 
+            {
+                u"$lookup": {
+                    u"from": EVENTS_TABLE_NAME,
+                    u"let": {
+                        u"event_ids": u"$_ids"
+                    },
+                    u"pipeline": [
+                        {
+                            u"$match": {
+                                u"$and": [
+                                    {
+                                        u"$expr": {
+                                            u"$in": [
+                                                u"$$CURRENT.%s" % REPORT_CONTACT_REF_FIELD_NAME,
+                                                u"$$event_ids"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        u"$expr": {
+                                            u"$eq": [
+                                                u"$$CURRENT.type",
+                                                TYPE.login
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        u"$expr": {
+                                            u"$lt": [
+                                                u"$$CURRENT.%s" % REPORT_CONTACT_TIME_DELTA_FIELD_NAME,
+                                                REPORT_ANALYSIS_TIME_WINDOW
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            u"$group": {
+                                u"_id": u"$$CURRENT.player",
+                                u"count": {
+                                    u"$sum": 1
+                                }
+                            }
+                        }
+                    ],
+                    u"as": u"logins"
+                }
+            }, 
+            {
+                u"$lookup": {
+                    u"from": EVENTS_TABLE_NAME,
+                    u"let": {
+                        u"event_ids": u"$_ids"
+                    },
+                    u"pipeline": [
+                        {
+                            u"$match": {
+                                u"$and": [
+                                    {
+                                        u"$expr": {
+                                            u"$in": [
+                                                u"$$CURRENT.%s" % REPORT_CONTACT_REF_FIELD_NAME,
+                                                u"$$event_ids"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        u"$expr": {
+                                            u"$eq": [
+                                                u"$$CURRENT.type",
+                                                TYPE.deposit
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        u"$expr": {
+                                            u"$lt": [
+                                                u"$$CURRENT.%s" % REPORT_CONTACT_TIME_DELTA_FIELD_NAME,
+                                                REPORT_ANALYSIS_TIME_WINDOW
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            u"$group": {
+                                u"_id": u"$$CURRENT.player",
+                                u"count": {
+                                    u"$sum": 1
+                                },
+                                u"sum": {
+                                    u"$sum": u"$$CURRENT.value"
+                                },
+                                u"avg": {
+                                    u"$avg": u"$$CURRENT.value"
+                                }
+                            }
+                        }
+                    ],
+                    u"as": u"deposits"
+                }
+            }, 
+            {
+                u"$project": {
+                    u"_id": 0,
+                    u"id": u"$_id.id",
+                    u"subtype": u"$_id.subtype",
+                    u"date": u"$_id.date",
+                    u"contacts": {
+                        u"$size": u"$_ids"
+                    },
+                    u"loggedin_players": {
+                        u"$size": u"$logins"
+                    },
+                    u"deposits": {
+                        u"$sum": u"$deposits.count"
+                    },
+                    u"depositors": {
+                        u"$size": u"$deposits"
+                    },
+                    u"totalvalue": {
+                        u"$sum": u"$deposits.sum"
+                    },
+                    u"meanvalue_per_user": {
+                        u"$ifNull": [
+                            {
+                                u"$avg": u"$deposits.avg"
+                            },
+                            0.0
+                        ]
+                    },
+                    u"meanvalue": {
+                        u"$cond": {
+                            u"if": {
+                                u"$eq": [
+                                    {
+                                        u"$sum": u"$deposits.count"
+                                    },
+                                    0.0
+                                ]
+                            },
+                            u"then": 0.0,
+                            u"else": {
+                                u"$divide": [
+                                    {
+                                        u"$sum": u"$deposits.sum"
+                                    },
+                                    {
+                                        u"$sum": u"$deposits.count"
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            }
+        ]
+
+        cursor = self.events.aggregate(
+            pipeline, allowDiskUse = True
+        )
+        for report in cursor:
+            self.reports.update({
+                    u"id": report["id"],
+                    u"subtype": report["subtype"],
+                    u"date": report["date"]
+                }, report, upsert=True)
+            count += 1
         return count
 
     def get_report(self, event_id, date=None):
@@ -210,7 +424,7 @@ class DataDog(object):
         if date is None:
             yesterday = date.today() - timedelta(1)
             date = yesterday.strftime('%Y-%m-%d')
-        
+
         reports = self.create_reports(event_id, date)
         for report in reports:
             self.reports.update({

@@ -31,7 +31,7 @@ def run():
             raise Exception("Date option is missing.")
         date_string = sys.argv[2]
 
-        print("Script is running with %s option for %s in %s mode..." % (COMMAND_OPTIONS.all, date_string, ENV))
+        print("Script is running with %s option for %s in %s mode..." % (COMMAND_OPTIONS.date, date_string, ENV))
         count = dog.report_for_all_data(date_string)
     else:
         event_id = sys.argv[1]
