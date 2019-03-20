@@ -120,8 +120,19 @@ class DataDog(object):
                         },
                     }
                 }, 
+                # {
+                #     u"$addFields": {
+                #         u"date": {
+                #             u"$dateToString": {
+                #                 u"format": u"%Y-%m-%d",
+                #                 u"date": u"$ts"
+                #             }
+                #         }
+                #     }
+                # }, 
                 {
-                    u"$addFields": {
+                    u"$project": {
+                        u"id": 1,
                         u"date": {
                             u"$dateToString": {
                                 u"format": u"%Y-%m-%d",
@@ -129,7 +140,7 @@ class DataDog(object):
                             }
                         }
                     }
-                }, 
+                },
                 {
                     u"$match": {
                         u"date": date,
@@ -213,8 +224,20 @@ class DataDog(object):
                     },
                 }
             }, 
+            # {
+            #     u"$addFields": {
+            #         u"date": {
+            #             u"$dateToString": {
+            #                 u"format": u"%Y-%m-%d",
+            #                 u"date": u"$ts"
+            #             }
+            #         }
+            #     }
+            # }, 
             {
-                u"$addFields": {
+                u"$project": {
+                    u"id": u"$id",
+                    u"subtype": u"$subtype",
                     u"date": {
                         u"$dateToString": {
                             u"format": u"%Y-%m-%d",
@@ -222,7 +245,7 @@ class DataDog(object):
                         }
                     }
                 }
-            }, 
+            },
         ]
 
         if date is not None:
@@ -508,7 +531,7 @@ class DataDog(object):
                                     {
                                         u"$expr": {
                                             u"$lt": [
-                                                u"$$CURRENT.%s" % REPORT_ANALYSIS_TIME_WINDOW,
+                                                u"$$CURRENT.%s" % REPORT_CONTACT_TIME_DELTA_FIELD_NAME,
                                                 REPORT_ANALYSIS_TIME_WINDOW
                                             ]
                                         }
@@ -557,7 +580,7 @@ class DataDog(object):
                                     {
                                         u"$expr": {
                                             u"$lt": [
-                                                u"$$CURRENT.%s" % REPORT_ANALYSIS_TIME_WINDOW,
+                                                u"$$CURRENT.%s" % REPORT_CONTACT_TIME_DELTA_FIELD_NAME,
                                                 REPORT_ANALYSIS_TIME_WINDOW
                                             ]
                                         }
