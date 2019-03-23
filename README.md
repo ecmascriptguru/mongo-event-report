@@ -42,7 +42,7 @@ If you finished the above things, then you should be able to execute the script 
 ```shell
 python run.py --all
 python run.py --date 2018-12-31
-python run.py extracoins-december18 2018-12-31
+python run.py extracoins-december18 sms 2018-12-31
 ```
 Unless you gave the date, then the script will consider that you would want to get report for yesterday.
 
