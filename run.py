@@ -23,7 +23,9 @@ def run():
     count = 0
 
     dog = DataDog()
-    if command_option == COMMAND_OPTIONS.all:
+    if command_option == COMMAND_OPTIONS.preprocess:
+        dog.assign_contact_ref()
+    elif command_option == COMMAND_OPTIONS.all:
         print("Script is running with %s option in %s mode..." % (COMMAND_OPTIONS.all, ENV))
         count = dog.report_for_all_data()
     elif command_option == COMMAND_OPTIONS.date:
@@ -35,14 +37,15 @@ def run():
         count = dog.report_for_all_data(date_string)
     else:
         event_id = sys.argv[1]
-        if len(sys.argv) > 2:
-            date_string = sys.argv[2]
+        if len(sys.argv) > 3:
+            subtype = sys.argv[2]
+            date_string = sys.argv[3]
         else:
             yesterday = date.today() - timedelta(1)
             date_string = yesterday.strftime('%Y-%m-%d')
         
-        print("Script is running with event(%s) at (%s) in %s mode..." % (event_id, date_string, ENV))
-        count = dog.get_report(event_id, date_string)
+        print("Script is running with event %s(%s) at (%s) in %s mode..." % (event_id, subtype, date_string, ENV))
+        count = dog.get_report(event_id, subtype, date_string)
 
     print("%d report(s) created in %s mode." % (count, ENV))
 

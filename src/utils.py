@@ -97,7 +97,7 @@ class DataDog(object):
                 },
                 sort=[('ts', -1)])
             if contact_ref:
-                doc[REPORT_CONTACT_REF_FIELD_NAME] = contact_ref['_id']
+                doc[REPORT_CONTACT_REF_FIELD_NAME] = contact_ref['id']
                 doc[REPORT_CONTACT_REF_SUBTYPE_FIELD_NAME] = contact_ref['subtype']
                 doc[REPORT_CONTACT_TIME_DELTA_FIELD_NAME] =\
                     int((doc['ts'] - contact_ref['ts']).total_seconds() / (60 * 60))
@@ -105,10 +105,10 @@ class DataDog(object):
         self.is_preprocessed = True
         return True
     
-    def get_possible_report_keys(self, date=None):
+    def get_possible_report_keys(self, event_date=None):
         collection = self.events
 
-        if date is not None:
+        if event_date is not None:
             pipeline = [
                 {
                     u"$match": {
@@ -120,19 +120,8 @@ class DataDog(object):
                         },
                     }
                 }, 
-                # {
-                #     u"$addFields": {
-                #         u"date": {
-                #             u"$dateToString": {
-                #                 u"format": u"%Y-%m-%d",
-                #                 u"date": u"$ts"
-                #             }
-                #         }
-                #     }
-                # }, 
                 {
-                    u"$project": {
-                        u"id": 1,
+                    u"$addFields": {
                         u"date": {
                             u"$dateToString": {
                                 u"format": u"%Y-%m-%d",
@@ -140,25 +129,29 @@ class DataDog(object):
                             }
                         }
                     }
-                },
+                }, 
                 {
                     u"$match": {
-                        u"date": date,
+                        u"date": event_date,
                     }
                 },
                 {
                     u"$group": {
                         u"_id": {
                             u"id": u"$id",
-                            u"date": u"$date"
-                        }
+                            u"date": u"$date",
+                            u"subtype": u"$subtype",
+                        },
+                        u"contacts": { u"$sum": 1 }
                     }
                 }, 
                 {
                     u"$project": {
                         u"_id": 0.0,
                         u"id": u"$_id.id",
-                        u"date": u"$_id.date"
+                        u"date": u"$_id.date",
+                        u"subtype": u"$_id.subtype",
+                        u"contacts": u"$contacts",
                     }
                 }
             ]
@@ -188,15 +181,19 @@ class DataDog(object):
                     u"$group": {
                         u"_id": {
                             u"id": u"$id",
-                            u"date": u"$date"
-                        }
+                            u"date": u"$date",
+                            u"subtype": u"$subtype",
+                        },
+                        u"contacts": { u"$sum": 1 }
                     }
                 }, 
                 {
                     u"$project": {
                         u"_id": 0.0,
                         u"id": u"$_id.id",
-                        u"date": u"$_id.date"
+                        u"date": u"$_id.date",
+                        u"subtype": u"$_id.subtype",
+                        u"contacts": u"$contacts",
                     }
                 }
             ]
@@ -205,459 +202,242 @@ class DataDog(object):
             pipeline, 
             allowDiskUse = True
         )
-        return [(doc['id'], doc['date']) for doc in cursor]
+        return [(doc['id'], doc['subtype'], doc['date'], doc['contacts']) for doc in cursor]
     
-    def report_for_all_data(self, date=None):
+    def report_for_all_data(self, event_date=None):
         count = 0
-        
-        if not self.is_preprocessed:
-            self.assign_contact_ref()
+        keys = self.get_possible_report_keys(event_date)
+        for event_id, subtype, event_date, contacts in keys:
+            count += self.get_report(event_id, subtype, event_date, contacts)
 
-        pipeline = [
-            {
-                u"$match": {
-                    u"type": u"contact",
-                    u"subtype": {
-                        u"$nin": [
-                            u"notification"
-                        ]
-                    },
-                }
-            }, 
-            # {
-            #     u"$addFields": {
-            #         u"date": {
-            #             u"$dateToString": {
-            #                 u"format": u"%Y-%m-%d",
-            #                 u"date": u"$ts"
-            #             }
-            #         }
-            #     }
-            # }, 
-            {
-                u"$project": {
-                    u"id": u"$id",
-                    u"subtype": u"$subtype",
-                    u"date": {
-                        u"$dateToString": {
-                            u"format": u"%Y-%m-%d",
-                            u"date": u"$ts"
-                        }
-                    }
-                }
-            },
-        ]
-
-        if date is not None:
-            pipeline.append(
-                {
-                    u"$match": {
-                        u"date": date,
-                    }
-                }
-            )
-
-        pipeline += [
-            {
-                u"$group": {
-                    u"_id": {
-                        u"id": u"$id",
-                        u"subtype": u"$subtype",
-                        u"date": u"$date",
-                    },
-                    u"_ids": {
-                        u"$push": u"$$ROOT._id"
-                    }
-                }
-            }, 
-            {
-                u"$lookup": {
-                    u"from": EVENTS_TABLE_NAME,
-                    u"let": {
-                        u"event_ids": u"$_ids"
-                    },
-                    u"pipeline": [
-                        {
-                            u"$match": {
-                                u"$and": [
-                                    {
-                                        u"$expr": {
-                                            u"$in": [
-                                                u"$$CURRENT.%s" % REPORT_CONTACT_REF_FIELD_NAME,
-                                                u"$$event_ids"
-                                            ]
-                                        }
-                                    },
-                                    {
-                                        u"$expr": {
-                                            u"$eq": [
-                                                u"$$CURRENT.type",
-                                                TYPE.login
-                                            ]
-                                        }
-                                    },
-                                    {
-                                        u"$expr": {
-                                            u"$lt": [
-                                                u"$$CURRENT.%s" % REPORT_CONTACT_TIME_DELTA_FIELD_NAME,
-                                                REPORT_ANALYSIS_TIME_WINDOW
-                                            ]
-                                        }
-                                    }
-                                ]
-                            }
-                        },
-                        {
-                            u"$group": {
-                                u"_id": u"$$CURRENT.player",
-                                u"count": {
-                                    u"$sum": 1
-                                }
-                            }
-                        }
-                    ],
-                    u"as": u"logins"
-                }
-            }, 
-            {
-                u"$lookup": {
-                    u"from": EVENTS_TABLE_NAME,
-                    u"let": {
-                        u"event_ids": u"$_ids"
-                    },
-                    u"pipeline": [
-                        {
-                            u"$match": {
-                                u"$and": [
-                                    {
-                                        u"$expr": {
-                                            u"$in": [
-                                                u"$$CURRENT.%s" % REPORT_CONTACT_REF_FIELD_NAME,
-                                                u"$$event_ids"
-                                            ]
-                                        }
-                                    },
-                                    {
-                                        u"$expr": {
-                                            u"$eq": [
-                                                u"$$CURRENT.type",
-                                                TYPE.deposit
-                                            ]
-                                        }
-                                    },
-                                    {
-                                        u"$expr": {
-                                            u"$lt": [
-                                                u"$$CURRENT.%s" % REPORT_CONTACT_TIME_DELTA_FIELD_NAME,
-                                                REPORT_ANALYSIS_TIME_WINDOW
-                                            ]
-                                        }
-                                    }
-                                ]
-                            }
-                        },
-                        {
-                            u"$group": {
-                                u"_id": u"$$CURRENT.player",
-                                u"count": {
-                                    u"$sum": 1
-                                },
-                                u"sum": {
-                                    u"$sum": u"$$CURRENT.value"
-                                },
-                                u"avg": {
-                                    u"$avg": u"$$CURRENT.value"
-                                }
-                            }
-                        }
-                    ],
-                    u"as": u"deposits"
-                }
-            }, 
-            {
-                u"$project": {
-                    u"_id": 0,
-                    u"id": u"$_id.id",
-                    u"subtype": u"$_id.subtype",
-                    u"date": u"$_id.date",
-                    u"contacts": {
-                        u"$size": u"$_ids"
-                    },
-                    u"loggedin_players": {
-                        u"$size": u"$logins"
-                    },
-                    u"deposits": {
-                        u"$sum": u"$deposits.count"
-                    },
-                    u"depositors": {
-                        u"$size": u"$deposits"
-                    },
-                    u"totalvalue": {
-                        u"$sum": u"$deposits.sum"
-                    },
-                    u"meanvalue_per_user": {
-                        u"$ifNull": [
-                            {
-                                u"$avg": u"$deposits.avg"
-                            },
-                            0.0
-                        ]
-                    },
-                    u"meanvalue": {
-                        u"$cond": {
-                            u"if": {
-                                u"$eq": [
-                                    {
-                                        u"$sum": u"$deposits.count"
-                                    },
-                                    0.0
-                                ]
-                            },
-                            u"then": 0.0,
-                            u"else": {
-                                u"$divide": [
-                                    {
-                                        u"$sum": u"$deposits.sum"
-                                    },
-                                    {
-                                        u"$sum": u"$deposits.count"
-                                    }
-                                ]
-                            }
-                        }
-                    }
-                }
-            }
-        ]
-
-        cursor = self.events.aggregate(
-            pipeline, allowDiskUse = True
-        )
-        for report in cursor:
-            self.reports.update({
-                    u"id": report["id"],
-                    u"subtype": report["subtype"],
-                    u"date": report["date"]
-                }, report, upsert=True)
-            count += 1
         return count
 
-    def get_report(self, event_id, date=None):
+    def get_contact_count(self, event_id, subtype, event_date):
+        pipeline = [
+                {
+                    u"$match": {
+                        u"type": u"contact",
+                        u"subtype": subtype,
+                        u"id": event_id
+                    }
+                }, 
+                {
+                    u"$addFields": {
+                        u"date": {
+                            u"$dateToString": {
+                                u"format": u"%Y-%m-%d",
+                                u"date": u"$ts"
+                            }
+                        }
+                    }
+                }, 
+                {
+                    u"$match": {
+                        u"date": event_date
+                    }
+                },
+                {
+                    u"$group": {
+                        u"_id": {
+                            u"id": u"$id",
+                            u"date": u"$date",
+                            u"subtype": u"$subtype",
+                        },
+                        u"contacts": { u"$sum": 1 }
+                    }
+                }, 
+                {
+                    u"$project": {
+                        u"contacts": { u"$ifNull": [u"$contacts", 0] },
+                    }
+                }
+            ]
+
+        cursor = self.events.aggregate(
+            pipeline, 
+            allowDiskUse = True
+        )
+
+        for doc in cursor:
+            return doc['contacts']
+
+    def get_report(self, event_id, subtype=None, event_date=None, contacts=None):
         count = 0
-        if date is None:
+        if event_date is None:
             yesterday = date.today() - timedelta(1)
             date = yesterday.strftime('%Y-%m-%d')
 
-        reports = self.create_reports(event_id, date)
+        if contacts is None:
+            contacts = self.get_contact_count(event_id, subtype, event_date)
+
+        reports = self.create_reports(event_id, subtype, event_date, contacts)
         for report in reports:
             self.reports.update({
-                    u"id": report["id"],
-                    u"subtype": report["subtype"],
-                    u"date": report["date"]
+                    'id': event_id,
+                    'subtype': subtype,
+                    'date': event_date,
                 }, report, upsert=True)
             count += 1
         return count
             
 
-    def create_reports(self, event_id, date):
+    def create_reports(self, event_id, subtype, event_date, contacts):
         if not self.is_preprocessed:
+            print("Preprocessing...")
             self.assign_contact_ref()
 
         pipeline = [
-            {
-                u"$match": {
-                    u"type": u"contact",
-                    u"subtype": {
-                        u"$nin": [
-                            u"notification"
+            { 
+                "$match" : {
+                    "type" : {
+                        "$in" : [
+                            TYPE.login, 
+                            TYPE.deposit
                         ]
-                    },
-                    u"id": event_id,
+                    }, 
+                    REPORT_CONTACT_REF_FIELD_NAME : event_id,
+                    REPORT_CONTACT_REF_SUBTYPE_FIELD_NAME: subtype,
+                    REPORT_CONTACT_TIME_DELTA_FIELD_NAME: { u"$lt": REPORT_ANALYSIS_TIME_WINDOW }
                 }
             }, 
-            {
-                u"$addFields": {
-                    u"date": {
-                        u"$dateToString": {
-                            u"format": u"%Y-%m-%d",
-                            u"date": u"$ts"
+            { 
+                "$addFields" : {
+                    "date" : {
+                        "$dateToString" : {
+                            "format" : "%Y-%m-%d", 
+                            "date" : "$ts"
                         }
                     }
                 }
             }, 
-            {
-                u"$match": {
-                    u"date": date,
+            { 
+                "$match" : {
+                    "date" : event_date
+                }
+            }, 
+            { 
+                "$facet" : {
+                    "logins" : [
+                        {
+                            "$match" : {
+                                "type" : TYPE.login
+                            }
+                        }, 
+                        {
+                            "$group" : {
+                                "_id" : "$player"
+                            }
+                        }, 
+                        {
+                            "$group" : {
+                                "_id" : {
+
+                                }, 
+                                "count" : {
+                                    "$sum" : 1.0
+                                }
+                            }
+                        }
+                    ], 
+                    "deposits" : [
+                        {
+                            "$match" : {
+                                "type" : TYPE.deposit
+                            }
+                        }, 
+                        {
+                            "$group" : {
+                                "_id" : "$player", 
+                                "count" : {
+                                    "$sum" : 1.0
+                                }, 
+                                "sum" : {
+                                    "$sum" : "$$CURRENT.value"
+                                }, 
+                                "avg" : {
+                                    "$avg" : "$$CURRENT.value"
+                                }
+                            }
+                        }, 
+                        {
+                            "$group" : {
+                                "_id" : {
+
+                                }, 
+                                "depositers" : {
+                                    "$sum" : 1.0
+                                }, 
+                                "total_deposits" : {
+                                    "$sum" : "$count"
+                                }, 
+                                "total_value" : {
+                                    "$sum" : "$sum"
+                                }, 
+                                "avg_value" : {
+                                    "$avg" : "$avg"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }, 
+            { 
+                "$project" : {
+                    "logins" : {
+                        "$arrayElemAt" : [
+                            "$logins", 
+                            0.0
+                        ]
+                    }, 
+                    "deposits" : {
+                        "$arrayElemAt" : [
+                            "$deposits", 
+                            0.0
+                        ]
+                    }
+                }
+            }, 
+            { 
+                "$project" : {
+                    "_id": 0,
+                    "id": event_id,
+                    "subtype": subtype,
+                    "date": event_date,
+                    "logged_in_users" : {
+                        "$ifNull" : [
+                            "$logins.count", 
+                            0.0
+                        ]
+                    }, 
+                    "depositers" : {
+                        "$ifNull" : [
+                            "$deposits.depositers", 
+                            0.0
+                        ]
+                    }, 
+                    "total_deposits" : {
+                        "$ifNull" : [
+                            "$deposits.total_deposits", 
+                            0.0
+                        ]
+                    }, 
+                    "total_value" : {
+                        "$ifNull" : [
+                            "$deposits.total_value", 
+                            0.0
+                        ]
+                    }, 
+                    "avg_value" : {
+                        "$ifNull" : [
+                            "$deposits.avg_value", 
+                            0.0
+                        ]
+                    }
                 }
             },
             {
-                u"$group": {
-                    u"_id": {
-                        u"id": u"$id",
-                        u"subtype": u"$subtype",
-                        u"date": u"$date",
-                    },
-                    u"_ids": {
-                        u"$push": u"$$ROOT._id"
-                    }
-                }
-            }, 
-            {
-                u"$lookup": {
-                    u"from": EVENTS_TABLE_NAME,
-                    u"let": {
-                        u"event_ids": u"$_ids"
-                    },
-                    u"pipeline": [
-                        {
-                            u"$match": {
-                                u"$and": [
-                                    {
-                                        u"$expr": {
-                                            u"$in": [
-                                                u"$$CURRENT.%s" % REPORT_CONTACT_REF_FIELD_NAME,
-                                                u"$$event_ids"
-                                            ]
-                                        }
-                                    },
-                                    {
-                                        u"$expr": {
-                                            u"$eq": [
-                                                u"$$CURRENT.type",
-                                                TYPE.login
-                                            ]
-                                        }
-                                    },
-                                    {
-                                        u"$expr": {
-                                            u"$lt": [
-                                                u"$$CURRENT.%s" % REPORT_CONTACT_TIME_DELTA_FIELD_NAME,
-                                                REPORT_ANALYSIS_TIME_WINDOW
-                                            ]
-                                        }
-                                    }
-                                ]
-                            }
-                        },
-                        {
-                            u"$group": {
-                                u"_id": u"$$CURRENT.player",
-                                u"count": {
-                                    u"$sum": 1
-                                }
-                            }
-                        }
-                    ],
-                    u"as": u"logins"
-                }
-            }, 
-            {
-                u"$lookup": {
-                    u"from": EVENTS_TABLE_NAME,
-                    u"let": {
-                        u"event_ids": u"$_ids"
-                    },
-                    u"pipeline": [
-                        {
-                            u"$match": {
-                                u"$and": [
-                                    {
-                                        u"$expr": {
-                                            u"$in": [
-                                                u"$$CURRENT.%s" % REPORT_CONTACT_REF_FIELD_NAME,
-                                                u"$$event_ids"
-                                            ]
-                                        }
-                                    },
-                                    {
-                                        u"$expr": {
-                                            u"$eq": [
-                                                u"$$CURRENT.type",
-                                                TYPE.deposit
-                                            ]
-                                        }
-                                    },
-                                    {
-                                        u"$expr": {
-                                            u"$lt": [
-                                                u"$$CURRENT.%s" % REPORT_CONTACT_TIME_DELTA_FIELD_NAME,
-                                                REPORT_ANALYSIS_TIME_WINDOW
-                                            ]
-                                        }
-                                    }
-                                ]
-                            }
-                        },
-                        {
-                            u"$group": {
-                                u"_id": u"$$CURRENT.player",
-                                u"count": {
-                                    u"$sum": 1
-                                },
-                                u"sum": {
-                                    u"$sum": u"$$CURRENT.value"
-                                },
-                                u"avg": {
-                                    u"$avg": u"$$CURRENT.value"
-                                }
-                            }
-                        }
-                    ],
-                    u"as": u"deposits"
-                }
-            }, 
-            {
-                u"$project": {
-                    u"_id": 0,
-                    u"id": u"$_id.id",
-                    u"subtype": u"$_id.subtype",
-                    u"date": u"$_id.date",
-                    u"contacts": {
-                        u"$size": u"$_ids"
-                    },
-                    u"loggedin_players": {
-                        u"$size": u"$logins"
-                    },
-                    u"deposits": {
-                        u"$sum": u"$deposits.count"
-                    },
-                    u"depositors": {
-                        u"$size": u"$deposits"
-                    },
-                    u"totalvalue": {
-                        u"$sum": u"$deposits.sum"
-                    },
-                    u"meanvalue_per_user": {
-                        u"$ifNull": [
-                            {
-                                u"$avg": u"$deposits.avg"
-                            },
-                            0.0
-                        ]
-                    },
-                    u"meanvalue": {
-                        u"$cond": {
-                            u"if": {
-                                u"$eq": [
-                                    {
-                                        u"$sum": u"$deposits.count"
-                                    },
-                                    0.0
-                                ]
-                            },
-                            u"then": 0.0,
-                            u"else": {
-                                u"$divide": [
-                                    {
-                                        u"$sum": u"$deposits.sum"
-                                    },
-                                    {
-                                        u"$sum": u"$deposits.count"
-                                    }
-                                ]
-                            }
-                        }
-                    }
+                "$addFields": {
+                    "contacts": contacts,
                 }
             }
         ]

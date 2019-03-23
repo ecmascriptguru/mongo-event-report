@@ -9,6 +9,7 @@ class ENVIRONMENT:
 
 
 class COMMAND_OPTIONS:
+    preprocess = '--pre'
     all = '--all'
     date = '--date'
 
