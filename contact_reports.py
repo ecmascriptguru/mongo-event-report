@@ -1,6 +1,6 @@
 import sys
 from datetime import date, timedelta, datetime
-from src.config import ENV, COMMAND_OPTIONS
+from src.config import ENV, COMMAND_OPTIONS, COMMAND_DATE_OPTIONS
 from src.utils import DataDog
 
 
@@ -29,9 +29,12 @@ def run():
         print("Script is running with %s option in %s mode..." % (COMMAND_OPTIONS.all, ENV))
         count = dog.report_for_all_data()
     elif command_option == COMMAND_OPTIONS.date:
-        if len(sys.argv) < 3:
-            raise Exception("Date option is missing.")
-        date_string = sys.argv[2]
+        if len(sys.argv) < 3 or sys.argv[2] == COMMAND_DATE_OPTIONS.yesterday:
+            date_string = DataDog.yesterday()
+        elif sys.argv[2] == COMMAND_DATE_OPTIONS.today:
+            date_string = DataDog.today()
+        else:
+            date_string = sys.argv[2]
 
         print("Script is running with %s option for %s in %s mode..." % (COMMAND_OPTIONS.date, date_string, ENV))
         count = dog.report_for_all_data(date_string)

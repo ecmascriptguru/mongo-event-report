@@ -38,11 +38,11 @@ Now you are ready to give it a try.
 ## Running the script
 If you finished the above things, then you should be able to execute the script to get the report. The following script will create the reports collection. In case of `dev` environment, this script will parse the sample file to create the collection specified by `EVENTS_TABLE_NAME`.
 
-### Example commands
+### Getting contacts report
 ```shell
-python run.py --all
-python run.py --date 2018-12-31
-python run.py extracoins-december18 sms 2018-12-31
+python contact_reports.py --all
+python contact_reports.py --date 2018-12-31
+python contact_reports.py extracoins-december18 sms 2018-12-31
 ```
 Unless you gave the date, then the script will consider that you would want to get report for yesterday.
 

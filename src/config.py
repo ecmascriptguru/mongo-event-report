@@ -13,6 +13,10 @@ class COMMAND_OPTIONS:
     all = '--all'
     date = '--date'
 
+class COMMAND_DATE_OPTIONS:
+    today = '--today'
+    yesterday = '--yesterday'
+
 
 ENV = os.environ.get('REPORT_PROJECT_ENV', ENVIRONMENT.production)
 BASE_DIR = dirname(dirname(__file__))

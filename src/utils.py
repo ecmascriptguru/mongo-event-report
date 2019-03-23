@@ -6,15 +6,15 @@ from .config import *
 
 
 class TYPE:
-    contact = u"contact"
-    login = u"login"
-    deposit = u"deposit"
+    contact = "contact"
+    login = "login"
+    deposit = "deposit"
 
 
 class SUB_TYPE:
-    contact_email = u"email"
-    contact_sms = u"sms"
-    contact_notification = u"notification"
+    contact_email = "email"
+    contact_sms = "sms"
+    contact_notification = "notification"
 
 
 SUB_TYPES = {
@@ -40,6 +40,16 @@ class DataDog(object):
                 "'env.json' file in project folder.")
             else:
                 self.events = self.db[EVENTS_TABLE_NAME]
+    
+    @classmethod
+    def yesterday(cls):
+        yesterday = date.today() - timedelta(1)
+        return yesterday.strftime('%Y-%m-%d')
+    
+    @classmethod
+    def today(cls):
+        today = date.today()
+        return today.strftime('%Y-%m-%d')
 
     def import_sample(self, file, encoding):
         read_map = {
@@ -111,89 +121,89 @@ class DataDog(object):
         if event_date is not None:
             pipeline = [
                 {
-                    u"$match": {
-                        u"type": u"contact",
-                        u"subtype": {
-                            u"$nin": [
-                                u"notification"
+                    "$match": {
+                        "type": "contact",
+                        "subtype": {
+                            "$nin": [
+                                "notification"
                             ]
                         },
                     }
                 }, 
                 {
-                    u"$addFields": {
-                        u"date": {
-                            u"$dateToString": {
-                                u"format": u"%Y-%m-%d",
-                                u"date": u"$ts"
+                    "$addFields": {
+                        "date": {
+                            "$dateToString": {
+                                "format": "%Y-%m-%d",
+                                "date": "$ts"
                             }
                         }
                     }
                 }, 
                 {
-                    u"$match": {
-                        u"date": event_date,
+                    "$match": {
+                        "date": event_date,
                     }
                 },
                 {
-                    u"$group": {
-                        u"_id": {
-                            u"id": u"$id",
-                            u"date": u"$date",
-                            u"subtype": u"$subtype",
+                    "$group": {
+                        "_id": {
+                            "id": "$id",
+                            "date": "$date",
+                            "subtype": "$subtype",
                         },
-                        u"contacts": { u"$sum": 1 }
+                        "contacts": { "$sum": 1 }
                     }
                 }, 
                 {
-                    u"$project": {
-                        u"_id": 0.0,
-                        u"id": u"$_id.id",
-                        u"date": u"$_id.date",
-                        u"subtype": u"$_id.subtype",
-                        u"contacts": u"$contacts",
+                    "$project": {
+                        "_id": 0.0,
+                        "id": "$_id.id",
+                        "date": "$_id.date",
+                        "subtype": "$_id.subtype",
+                        "contacts": "$contacts",
                     }
                 }
             ]
         else:
             pipeline = [
                 {
-                    u"$match": {
-                        u"type": u"contact",
-                        u"subtype": {
-                            u"$nin": [
-                                u"notification"
+                    "$match": {
+                        "type": "contact",
+                        "subtype": {
+                            "$nin": [
+                                "notification"
                             ]
                         }
                     }
                 }, 
                 {
-                    u"$addFields": {
-                        u"date": {
-                            u"$dateToString": {
-                                u"format": u"%Y-%m-%d",
-                                u"date": u"$ts"
+                    "$addFields": {
+                        "date": {
+                            "$dateToString": {
+                                "format": "%Y-%m-%d",
+                                "date": "$ts"
                             }
                         }
                     }
                 }, 
                 {
-                    u"$group": {
-                        u"_id": {
-                            u"id": u"$id",
-                            u"date": u"$date",
-                            u"subtype": u"$subtype",
+                    "$group": {
+                        "_id": {
+                            "id": "$id",
+                            "date": "$date",
+                            "subtype": "$subtype",
                         },
-                        u"contacts": { u"$sum": 1 }
+                        "contacts": { "$sum": 1 }
                     }
                 }, 
                 {
-                    u"$project": {
-                        u"_id": 0.0,
-                        u"id": u"$_id.id",
-                        u"date": u"$_id.date",
-                        u"subtype": u"$_id.subtype",
-                        u"contacts": u"$contacts",
+                    "$project": {
+                        "_id": 0.0,
+                        "id": "$_id.id",
+                        "date": "$_id.date",
+                        "subtype": "$_id.subtype",
+                        "contacts": "$contacts",
                     }
                 }
             ]
@@ -215,40 +225,40 @@ class DataDog(object):
     def get_contact_count(self, event_id, subtype, event_date):
         pipeline = [
                 {
-                    u"$match": {
-                        u"type": u"contact",
-                        u"subtype": subtype,
-                        u"id": event_id
+                    "$match": {
+                        "type": "contact",
+                        "subtype": subtype,
+                        "id": event_id
                     }
                 }, 
                 {
-                    u"$addFields": {
-                        u"date": {
-                            u"$dateToString": {
-                                u"format": u"%Y-%m-%d",
-                                u"date": u"$ts"
+                    "$addFields": {
+                        "date": {
+                            "$dateToString": {
+                                "format": "%Y-%m-%d",
+                                "date": "$ts"
                             }
                         }
                     }
                 }, 
                 {
-                    u"$match": {
-                        u"date": event_date
+                    "$match": {
+                        "date": event_date
                     }
                 },
                 {
-                    u"$group": {
-                        u"_id": {
-                            u"id": u"$id",
-                            u"date": u"$date",
-                            u"subtype": u"$subtype",
+                    "$group": {
+                        "_id": {
+                            "id": "$id",
+                            "date": "$date",
+                            "subtype": "$subtype",
                         },
-                        u"contacts": { u"$sum": 1 }
+                        "contacts": { "$sum": 1 }
                     }
                 }, 
                 {
-                    u"$project": {
-                        u"contacts": { u"$ifNull": [u"$contacts", 0] },
+                    "$project": {
+                        "contacts": { "$ifNull": ["$contacts", 0] },
                     }
                 }
             ]
@@ -270,7 +280,7 @@ class DataDog(object):
         if contacts is None:
             contacts = self.get_contact_count(event_id, subtype, event_date)
 
-        reports = self.create_reports(event_id, subtype, event_date, contacts)
+        reports = self.create_login_n_deposit_reports(event_id, subtype, event_date, contacts)
         for report in reports:
             self.reports.update({
                     'id': event_id,
@@ -281,7 +291,7 @@ class DataDog(object):
         return count
             
 
-    def create_reports(self, event_id, subtype, event_date, contacts):
+    def create_login_n_deposit_reports(self, event_id, subtype, event_date, contacts):
         if not self.is_preprocessed:
             print("Preprocessing...")
             self.assign_contact_ref()
@@ -297,7 +307,7 @@ class DataDog(object):
                     }, 
                     REPORT_CONTACT_REF_FIELD_NAME : event_id,
                     REPORT_CONTACT_REF_SUBTYPE_FIELD_NAME: subtype,
-                    REPORT_CONTACT_TIME_DELTA_FIELD_NAME: { u"$lt": REPORT_ANALYSIS_TIME_WINDOW }
+                    REPORT_CONTACT_TIME_DELTA_FIELD_NAME: { "$lt": REPORT_ANALYSIS_TIME_WINDOW }
                 }
             }, 
             { 
