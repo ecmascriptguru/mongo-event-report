@@ -2,19 +2,8 @@ from datetime import date, timedelta
 import pandas as pd
 from bson.son import SON
 from dateutil.parser import parse
+from .constants import TYPE, SUB_TYPE, REPORT_TYPE
 from .config import *
-
-
-class TYPE:
-    contact = "contact"
-    login = "login"
-    deposit = "deposit"
-
-
-class SUB_TYPE:
-    contact_email = "email"
-    contact_sms = "sms"
-    contact_notification = "notification"
 
 
 SUB_TYPES = {
@@ -27,10 +16,14 @@ SUB_TYPES = {
 class DataDog(object):
     """Utility to manage data resource"""
     is_preprocessed = False
+    possible_keys_function_name_template = "get_%s_report_keys"
+    report_all_func_name_template = "%s_report_for_all_data"
+    report_func_name_template = "get_%s_report"
 
     def __init__(self, *args, **kwargs):
         self.db = db
-        self.reports = self.db[REPORT_RESULTS_TABLE_NAME]
+        self.contacts_report = self.db[CONTACTS_REPORT_RESULTS_TABLE_NAME]
+        self.freebies_report = self.db[FREEBIE_REPORT_RESULTS_TABLE_NAME]
         if ENV == ENVIRONMENT.development:
             self.prepare_example_data()
         else:
@@ -115,17 +108,24 @@ class DataDog(object):
         self.is_preprocessed = True
         return True
     
-    def get_possible_report_keys(self, event_date=None):
+    def get_possible_report_keys(self, event_date=None, report_type=REPORT_TYPE.contacts_report):
+        func_name = self.possible_keys_function_name_template % report_type
+        if hasattr(self, func_name):
+            return getattr(self, func_name)(event_date)
+        else:
+            raise Exception("Not Implemented for %s type" % report_type)
+    
+    def get_contacts_report_keys(self, event_date=None):
         collection = self.events
 
         if event_date is not None:
             pipeline = [
                 {
                     "$match": {
-                        "type": "contact",
+                        "type": TYPE.contact,
                         "subtype": {
                             "$nin": [
-                                "notification"
+                                SUB_TYPE.contact_notification
                             ]
                         },
                     }
@@ -169,10 +169,10 @@ class DataDog(object):
             pipeline = [
                 {
                     "$match": {
-                        "type": "contact",
+                        "type": TYPE.contact,
                         "subtype": {
                             "$nin": [
-                                "notification"
+                                SUB_TYPE.contact_notification
                             ]
                         }
                     }
@@ -214,11 +214,113 @@ class DataDog(object):
         )
         return [(doc['id'], doc['subtype'], doc['date'], doc['contacts']) for doc in cursor]
     
-    def report_for_all_data(self, event_date=None):
+    def get_freebies_report_keys(self, event_date=None):
+        collection = self.events
+
+        if event_date is not None:
+            pipeline = [
+                {
+                    "$match": {
+                        "type": TYPE.freebie,
+                        "subtype": SUB_TYPE.freebie_coin,
+                    }
+                }, 
+                {
+                    "$addFields": {
+                        "date": {
+                            "$dateToString": {
+                                "format": "%Y-%m-%d",
+                                "date": "$ts"
+                            }
+                        }
+                    }
+                }, 
+                {
+                    "$match": {
+                        "date": event_date,
+                    }
+                },
+                {
+                    "$group": {
+                        "_id": {
+                            "id": "$id",
+                            "date": "$date",
+                            "subtype": "$subtype",
+                        },
+                    }
+                }, 
+                {
+                    "$project": {
+                        "_id": 0.0,
+                        "id": "$_id.id",
+                        "date": "$_id.date",
+                        "subtype": "$_id.subtype",
+                    }
+                }
+            ]
+        else:
+            pipeline = [
+                {
+                    "$match": {
+                        "type": TYPE.freebie,
+                        "subtype": SUB_TYPE.freebie_coin,
+                    }
+                }, 
+                {
+                    "$addFields": {
+                        "date": {
+                            "$dateToString": {
+                                "format": "%Y-%m-%d",
+                                "date": "$ts"
+                            }
+                        }
+                    }
+                }, 
+                {
+                    "$group": {
+                        "_id": {
+                            "id": "$id",
+                            "date": "$date",
+                            "subtype": "$subtype",
+                        },
+                    }
+                }, 
+                {
+                    "$project": {
+                        "_id": 0.0,
+                        "id": "$_id.id",
+                        "date": "$_id.date",
+                        "subtype": "$_id.subtype",
+                    }
+                }
+            ]
+
+        cursor = collection.aggregate(
+            pipeline, 
+            allowDiskUse = True
+        )
+        return [(doc['id'], doc['subtype'], doc['date']) for doc in cursor]
+    
+    def report_for_all_data(self, event_date=None, report_type=REPORT_TYPE.contacts_report):
+        func_name = self.report_all_func_name_template % report_type
+        if hasattr(self, func_name):
+            return getattr(self, func_name)(event_date)
+        else:
+            raise Exception("Not Implemented for %s type" % report_type)
+
+    def contacts_report_for_all_data(self, event_date):
         count = 0
         keys = self.get_possible_report_keys(event_date)
         for event_id, subtype, event_date, contacts in keys:
             count += self.get_report(event_id, subtype, event_date, contacts)
+
+        return count
+
+    def freebies_report_for_all_data(self, event_date):
+        count = 0
+        keys = self.get_possible_report_keys(event_date, report_type=REPORT_TYPE.freebies_report)
+        for event_id, subtype, event_date in keys:
+            count += self.get_report(event_id, subtype, event_date, report_type=REPORT_TYPE.freebies_report)
 
         return count
 
@@ -271,29 +373,50 @@ class DataDog(object):
         for doc in cursor:
             return doc['contacts']
 
-    def get_report(self, event_id, subtype=None, event_date=None, contacts=None):
+    def get_report(self, event_id, subtype=None, event_date=None, contacts=None, 
+                    report_type=REPORT_TYPE.contacts_report):
+        func_name = self.report_func_name_template % report_type
+        if hasattr(self, func_name):
+            return getattr(self, func_name)(event_id, subtype, event_date, contacts)
+        else:
+            raise Exception("Not implemented yet.")
+
+    def get_contacts_report(self, event_id, subtype=None, event_date=None, contacts=None):
         count = 0
         if event_date is None:
-            yesterday = date.today() - timedelta(1)
-            date = yesterday.strftime('%Y-%m-%d')
+            event_date = self.yesterday()
 
         if contacts is None:
             contacts = self.get_contact_count(event_id, subtype, event_date)
 
-        reports = self.create_login_n_deposit_reports(event_id, subtype, event_date, contacts)
+        reports = self.create_contact_report(event_id, subtype, event_date, contacts)
         for report in reports:
-            self.reports.update({
+            self.contacts_report.update({
                     'id': event_id,
                     'subtype': subtype,
                     'date': event_date,
                 }, report, upsert=True)
             count += 1
         return count
-            
+   
+    def get_freebies_report(self, event_id, subtype=None, event_date=None, contacts=None):
+        count = 0
+        if event_date is None:
+            event_date = self.yesterday()
 
-    def create_login_n_deposit_reports(self, event_id, subtype, event_date, contacts):
+        reports = self.create_freebie_report(event_id, subtype, event_date)
+        for report in reports:
+            self.freebies_report.update({
+                    'id': event_id,
+                    'subtype': subtype,
+                    'date': event_date,
+                }, report, upsert=True)
+            count += 1
+        return count
+
+    def create_contact_report(self, event_id, subtype, event_date, contacts):
         if not self.is_preprocessed:
-            print("Preprocessing...")
+            print("Preprocessing for contact report...")
             self.assign_contact_ref()
 
         pipeline = [
@@ -448,6 +571,69 @@ class DataDog(object):
             {
                 "$addFields": {
                     "contacts": contacts,
+                }
+            }
+        ]
+
+        cursor = self.events.aggregate(
+            pipeline, allowDiskUse = True
+        )
+        return [doc for doc in cursor]
+
+    def create_freebie_report(self, event_id, subtype, event_date):
+        pipeline = [
+            { 
+                "$match" : {
+                    "type" : TYPE.freebie, 
+                    "subtype" : subtype, 
+                    "id" : event_id,
+                }
+            }, 
+            { 
+                "$addFields" : {
+                    "date" : {
+                        "$dateToString" : {
+                            "format" : "%Y-%m-%d", 
+                            "date" : "$ts",
+                        }
+                    }
+                }
+            }, 
+            { 
+                "$match" : {
+                    "date" : event_date
+                }
+            }, 
+            { 
+                "$group" : {
+                    "_id" : "$player", 
+                    "event" : {
+                        "$push" : "$$CURRENT"
+                    }, 
+                    "count" : {
+                        "$sum" : 1.0
+                    }
+                }
+            }, 
+            { 
+                "$group" : {
+                    "_id" : None, 
+                    "player" : {
+                        "$sum" : 1.0
+                    }, 
+                    "count" : {
+                        "$sum" : "$count"
+                    }
+                }
+            },
+            {
+                "$project": {
+                    "_id": 0,
+                    "id": event_id,
+                    "subtype": subtype,
+                    "date": event_date,
+                    "player": 1,
+                    "count": 1,
                 }
             }
         ]

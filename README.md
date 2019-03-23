@@ -20,12 +20,12 @@ You might not be sure about some env vars in the configuration file `env.json`. 
     "MONGODB_PORT": 27017,       // MongoDB Port
     "DB_NAME": "admin",          // Database name
     "EVENTS_TABLE_NAME": "events",
-    "REPORT_RESULTS_TABLE_NAME": "reports",
+    "CONTACTS_REPORT_RESULTS_TABLE_NAME": "reports",
     "REPORT_ANALYSIS_TIME_WINDOW": 10,
     "SAMPLE_DATA_FILE_NAME": "k.csv"
 }
 ```
-Here, `EVENTS_TABLE_NAME` is name of collection that has event logs, and `REPORT_RESULTS_TABLE_NAME` is name of collection that will have the report result. This collection will be used to query some criterias.
+Here, `EVENTS_TABLE_NAME` is name of collection that has event logs, and `CONTACTS_REPORT_RESULTS_TABLE_NAME` is name of collection that will have the report result. This collection will be used to query some criterias.
 
 `REPORT_ANALYSIS_TIME_WINDOW` is the window size of time delta, which will be used to get contact events that caused specific users to deposit or login to the system. If you leave it, it will be 10 hours by default.
 
