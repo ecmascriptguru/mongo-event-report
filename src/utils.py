@@ -418,6 +418,7 @@ class DataDog(object):
         if not self.is_preprocessed:
             print("Preprocessing for contact report...")
             self.assign_contact_ref()
+            print("Preprocessing for contact was done.")
 
         pipeline = [
             { 

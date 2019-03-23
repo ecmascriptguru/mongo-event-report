@@ -40,11 +40,33 @@ If you finished the above things, then you should be able to execute the script 
 
 ### Getting contacts report
 ```shell
-python contact_reports.py --all
-python contact_reports.py --date 2018-12-31
-python contact_reports.py extracoins-december18 sms 2018-12-31
+python run_contacts.py --all
+python run_contacts.py --date 2018-12-31
+python run_contacts.py extracoins-december18 sms 2018-12-31
 ```
 Unless you gave the date, then the script will consider that you would want to get report for yesterday.
+
+### Getting freebies report
+This is the same as the above but script file name is different.
+```shell
+python run_freebies.py --all
+python run_freebies.py --date 2018-12-31
+python run_freebies.py extracoins-december18 sms 2018-12-31
+```
+
+### Getting all reports
+In this case there are only 2 cases 
+- one is to get report for all data 
+```shell
+python run.py --all
+```
+- another is to get report for specific date
+```shell
+python run.py --date 2018-12-31
+python run.py --date --today
+python run.py --date --yesterday
+python run.py --date
+```
 
 ## Remarks
 ### Issues or Inconvenience of DB Structure
