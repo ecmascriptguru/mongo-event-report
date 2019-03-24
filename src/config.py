@@ -7,6 +7,17 @@ class ENVIRONMENT:
     development = 'dev'
     production = 'production'
 
+
+class COMMAND_OPTIONS:
+    preprocess = '--pre'
+    all = '--all'
+    date = '--date'
+
+class COMMAND_DATE_OPTIONS:
+    today = '--today'
+    yesterday = '--yesterday'
+
+
 ENV = os.environ.get('REPORT_PROJECT_ENV', ENVIRONMENT.production)
 BASE_DIR = dirname(dirname(__file__))
 
@@ -31,8 +42,10 @@ SAMPLE_DATA_FILE = join(dirname(BASE_DIR), SAMPLE_DATA_FILE_NAME)
 db = None
 DB_NAME = ENV_JSON.get('DB_NAME', 'admin')
 EVENTS_TABLE_NAME = ENV_JSON.get('EVENTS_TABLE_NAME', 'report_data.events')
-REPORT_RESULTS_TABLE_NAME = ENV_JSON.get('REPORT_RESULTS_TABLE_NAME', 'report_data.reports')
+CONTACTS_REPORT_RESULTS_TABLE_NAME = ENV_JSON.get('CONTACTS_REPORT_RESULTS_TABLE_NAME', 'report_data.reports')
+FREEBIE_REPORT_RESULTS_TABLE_NAME = ENV_JSON.get('FREEBIE_REPORT_RESULTS_TABLE_NAME', 'report_data.freebies')
 REPORT_CONTACT_REF_FIELD_NAME = ENV_JSON.get('REPORT_CONTACT_REF_FIELD_NAME', 'contact_event_ref')
+REPORT_CONTACT_REF_SUBTYPE_FIELD_NAME = ENV_JSON.get('REPORT_CONTACT_REF_SUBTYPE_FIELD_NAME', 'contact_event_subtype')
 REPORT_CONTACT_TIME_DELTA_FIELD_NAME = ENV_JSON.get('REPORT_CONTACT_TIME_DELTA_FIELD_NAME', 'contact_time_delta')
 REPORT_ANALYSIS_TIME_WINDOW = ENV_JSON.get('REPORT_ANALYSIS_TIME_WINDOW', 10)
 
